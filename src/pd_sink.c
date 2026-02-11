@@ -6,16 +6,25 @@
 #define PD_VOLTAGE_STEP_MV 50U
 #define PD_CURRENT_STEP_MA 10U
 
+/*
+ * Fixed PDO 电压字段单位是 50mV。
+ */
 static uint16_t pdo_fixed_mv(uint32_t pdo)
 {
     return (uint16_t)(((pdo >> 10) & 0x3FFU) * PD_VOLTAGE_STEP_MV);
 }
 
+/*
+ * Fixed PDO 电流字段单位是 10mA。
+ */
 static uint16_t pdo_fixed_max_current_ma(uint32_t pdo)
 {
     return (uint16_t)((pdo & 0x3FFU) * PD_CURRENT_STEP_MA);
 }
 
+/*
+ * 统一状态跳转出口，便于后续插入 tracing / metrics。
+ */
 static void set_state(pd_sink_ctx_t *ctx, pd_sink_state_t next)
 {
     pd_sink_state_t prev = ctx->state;
@@ -43,6 +52,10 @@ static bool pick_request_from_caps(const pd_sink_policy_t *policy,
 
     memset(out, 0, sizeof(*out));
 
+    /*
+     * 第一轮：尝试满足 preferred 档位。
+     * 选电压不高于目标、且最接近 preferred_mv 的 PDO。
+     */
     for (i = 0; i < caps->object_count && i < PD_MAX_DATA_OBJECTS; ++i) {
         uint32_t pdo = caps->objects[i];
         uint16_t mv = pdo_fixed_mv(pdo);
@@ -71,6 +84,9 @@ static bool pick_request_from_caps(const pd_sink_policy_t *policy,
         }
     }
 
+    /*
+     * 第二轮：回退到 fallback 档位（通常是 5V）。
+     */
     if (!found) {
         for (i = 0; i < caps->object_count && i < PD_MAX_DATA_OBJECTS; ++i) {
             uint32_t pdo = caps->objects[i];
@@ -113,6 +129,7 @@ void pd_sink_on_event(pd_sink_ctx_t *ctx,
 
     switch (ctx->state) {
     case PD_SINK_STATE_WAIT_FOR_ATTACH:
+        /* 等待 Type-C 附着，附着后开始等待 Source_Capabilities。 */
         if (event == PD_EVT_ATTACH) {
             set_state(ctx, PD_SINK_STATE_WAIT_FOR_CAPS);
             if (ctx->port.arm_timer != NULL) {
@@ -122,6 +139,10 @@ void pd_sink_on_event(pd_sink_ctx_t *ctx,
         break;
 
     case PD_SINK_STATE_WAIT_FOR_CAPS:
+        /*
+         * 收到 Source_Capabilities 后根据策略选档并发送 Request。
+         * 若超时未收到能力广告，触发 Hard Reset 尝试链路恢复。
+         */
         if (event == PD_EVT_RX_SOURCE_CAPS) {
             const pd_source_caps_t *caps = (const pd_source_caps_t *)event_payload;
             if (caps == NULL) {
@@ -156,6 +177,7 @@ void pd_sink_on_event(pd_sink_ctx_t *ctx,
         break;
 
     case PD_SINK_STATE_WAIT_ACCEPT:
+        /* 等待 Source 对 Request 的响应（Accept/Reject）。 */
         if (event == PD_EVT_RX_ACCEPT) {
             if (ctx->port.cancel_timer != NULL) {
                 ctx->port.cancel_timer(PD_EVT_TIMEOUT_SENDER_RESPONSE);
@@ -173,6 +195,7 @@ void pd_sink_on_event(pd_sink_ctx_t *ctx,
         break;
 
     case PD_SINK_STATE_WAIT_PS_RDY:
+        /* Accept 后等待电源切换完成通知（PS_RDY）。 */
         if (event == PD_EVT_RX_PS_RDY) {
             if (ctx->port.cancel_timer != NULL) {
                 ctx->port.cancel_timer(PD_EVT_TIMEOUT_SENDER_RESPONSE);
@@ -187,6 +210,7 @@ void pd_sink_on_event(pd_sink_ctx_t *ctx,
         break;
 
     case PD_SINK_STATE_READY:
+        /* Ready 态处理复位与掉线事件。 */
         if (event == PD_EVT_DETACH) {
             set_state(ctx, PD_SINK_STATE_WAIT_FOR_ATTACH);
         } else if (event == PD_EVT_RX_SOFT_RESET) {
