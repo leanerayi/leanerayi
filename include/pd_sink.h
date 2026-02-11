@@ -11,7 +11,7 @@ extern "C" {
 #define PD_MAX_DATA_OBJECTS 7U
 
 /**
- * @brief Sink 侧策略引擎状态。
+ * @brief Sink 侧 Policy Engine（PE）状态。
  *
  * 这里聚焦最小可用流程（MVP）：
  * WaitForAttach -> WaitForCaps -> WaitAccept -> WaitPS_RDY -> Ready。
@@ -117,7 +117,7 @@ void pd_sink_init(pd_sink_ctx_t *ctx,
                   const pd_sink_port_if_t *port_if);
 
 /**
- * @brief 向 Sink 状态机注入事件。
+ * @brief 向 Sink PE 状态机注入事件。
  *
  * @param event_payload
  * - PD_EVT_RX_SOURCE_CAPS: 传入 const pd_source_caps_t*

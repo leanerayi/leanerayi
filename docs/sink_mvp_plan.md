@@ -13,6 +13,12 @@
 - `include/pd_sink.h`：对外接口、状态、事件、端口回调
 - `src/pd_sink.c`：Sink 策略状态机（不直接访问 UCPD 寄存器）
 
+
+## 分层定位（先 Sink）
+- `pd_sink`：Policy Engine（PE），负责状态机与策略决策。
+- `pd_protocol`：Protocol Layer（PRL）基础能力，负责报文头/RDO 打包和 MessageID 维护。
+- `phy_ucpd`（待接入）：UCPD 寄存器、中断、收发队列。
+
 ## 集成建议
 1. UCPD ISR 中仅做收发搬运与事件入队。
 2. 主循环调用 `pd_sink_on_event` 推进状态机。
