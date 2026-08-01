@@ -1,0 +1,43 @@
+name: Build revised thesis DOCX
+
+on:
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  build-docx:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install python-docx
+      - name: Build thesis document
+        run: python tools/build_revised_thesis.py
+      - name: Commit generated Word file
+        run: |
+          git config user.name "chatgpt-doc-builder"
+          git config user.email "chatgpt-doc-builder@users.noreply.github.com"
+          git add "output/B市三级公立医院病案管理人员公共管理硕士论文_参考洪梦园综述写法修订版.docx"
+          if git diff --cached --quiet; then
+            echo "No document changes to commit"
+          else
+            git commit -m "Generate revised thesis Word document"
+            git push origin HEAD:${{ github.head_ref }}
+          fi
+      - name: Upload document artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: revised-thesis-docx
+          path: output/B市三级公立医院病案管理人员公共管理硕士论文_参考洪梦园综述写法修订版.docx
+          if-no-files-found: error
